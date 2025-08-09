@@ -18,7 +18,7 @@ class MomoService{
   $this->apiUser=env('MOMO_API_USER');
   $this->apiKey=env('MOMO_API_KEY');
   $this->targetEnv=env('MOMO_TARGET_ENVIRONMENT','sandbox');
-  $this->currency=env('MOMO_CURRENCY','UGX');
+  $this->currency=env('MOMO_CURRENCY','USD');
  }
 
  protected function createUser(){
@@ -45,7 +45,7 @@ class MomoService{
   return $response->getBody()->getContents();
  }
 
- public function getToken(){
+ protected function getToken(){
   $response=$this->client->post("{$this->baseUrl}/collection/token/",[
     'headers'=>[
       'Authorization'=> 'Basic '. base64_encode($this->apiUser . ':' . $this->apiKey),
@@ -61,16 +61,16 @@ class MomoService{
 
  public function requestToPay($paynumber,$amount){
   $uuid=(string)Str::uuid();
-  $this->client->post("https://sandbox.momodeveloper.mtn.com/collection/v1_0/requesttopay",[
+  $this->client->post("{$this->baseUrl}/collection/v1_0/requesttopay",[
   'headers'=>[
-    'Authorization'=>'Bearer'. $this->getToken(),
+    'Authorization'=>'Bearer '. $this->getToken(),
     'X-Reference-Id'=>$uuid,
     'X-Target-Environment'=>$this->targetEnv,
-    'Ocp-Apim-Subscription-Key'=>$this->primaryKey
+    'Ocp-Apim-Subscription-Key'=>$this->primaryKey,
+    'Content-Type'=>"application/json"
   ],
   'json'=>[
-
-  "amount"=>number_format($amount, 2, '.', ''),
+  "amount"=>$amount,
   "currency"=>$this->currency,
   "externalId"=>"00004335",
   "payer"=>[
@@ -81,9 +81,24 @@ class MomoService{
   "payeeNote"=>"MoMo Market Payment"
 
   ]
+
   ]);
   return $uuid;
  }
+
+public function getPaymentStatus($referenceId)
+    {
+        $response = $this->client->get("{$this->baseUrl}/collection/v1_0/requesttopay/{$referenceId}", [
+            'headers' => [
+                'Authorization' => 'Bearer ' . $this->getToken(),
+                'X-Target-Environment' => $this->targetEnv,
+                'Ocp-Apim-Subscription-Key' => $this->primaryKey,
+            ],
+        ]);
+
+        return json_decode($response->getBody(), true);
+    }
+
 
 
 }
