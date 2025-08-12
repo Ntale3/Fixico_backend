@@ -36,8 +36,13 @@ return [
     */
 
     'guards' => [
-        'web' => [
-            'driver' => 'session',
+         'web' => [
+        'driver' => 'session',  // Web should use session
+        'provider' => 'users',
+                 ],
+                 
+        'api' => [
+            'driver' => 'sanctum',  // API should use sanctum
             'provider' => 'users',
         ],
     ],
