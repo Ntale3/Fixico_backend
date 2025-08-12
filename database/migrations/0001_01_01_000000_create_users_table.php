@@ -16,9 +16,23 @@ return new class extends Migration
             $table->string('name');
             $table->string('email')->unique();
             $table->timestamp('email_verified_at')->nullable();
-            $table->string('password');
+
+            // OAuth fields for Google OAuth integration
+            $table->string('provider')->nullable();
+            $table->string('provider_id')->nullable();
+            $table->string('avatar')->nullable();
+
+
+            $table->string('password')->nullable();
+
+            $table->string('role')->default('user');
+            $table->boolean('is_admin')->default(false);
+
             $table->rememberToken();
             $table->timestamps();
+
+            // Add indexes for OAuth fields
+            $table->index(['provider', 'provider_id']);
         });
 
         Schema::create('password_reset_tokens', function (Blueprint $table) {
