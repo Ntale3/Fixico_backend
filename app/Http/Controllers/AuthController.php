@@ -5,339 +5,199 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use App\Models\User;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
+
 class AuthController extends Controller
 {
-    /**
-     * Register a new user
-     */
+    private function success($message, $data = [], $status = 200)
+    {
+        return response()->json([
+            'success' => true,
+            'message' => $message,
+            'data'    => $data
+        ], $status);
+    }
+
+    private function error($message, $errors = [], $status = 422)
+    {
+        return response()->json([
+            'success' => false,
+            'message' => $message,
+            'errors'  => $errors
+        ], $status);
+    }
+
+    private function transformUser(User $user)
+    {
+        return [
+            'id'               => $user->id,
+            'name'             => $user->name,
+            'email'            => $user->email,
+            'avatar'           => $user->avatar,
+            'provider'         => $user->provider,
+            'is_admin'         => $user->isAdmin(),
+            'created_at'       => $user->created_at,
+            'email_verified_at'=> $user->email_verified_at
+        ];
+    }
+
     public function register(Request $request)
     {
-        $validator = Validator::make($request->all(), [
-            'name' => 'required|string|max:255',
-            'email' => 'required|string|email|max:255|unique:users',
+        $data = $request->validate([
+            'name'     => 'required|string|max:255',
+            'email'    => 'required|string|email|max:255|unique:users',
             'password' => 'required|string|min:8|confirmed',
         ]);
 
-        if ($validator->fails()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Validation failed',
-                'errors' => $validator->errors()
-            ], 422);
-        }
+        return DB::transaction(function () use ($data) {
+            $data['password'] = Hash::make($data['password']);
+            $user = User::create($data);
 
-        $user = User::create([
-            'name' => $request->name,
-            'email' => $request->email,
-            'password' => Hash::make($request->password),
-        ]);
+            $token = $user->createToken('auth_token')->plainTextToken;
 
-        $token = $user->createToken('auth_token')->plainTextToken;
-
-        return response()->json([
-            'success' => true,
-            'message' => 'User registered successfully',
-            'data' => [
-                'user' => [
-                    'id' => $user->id,
-                    'name' => $user->name,
-                    'email' => $user->email,
-                    'is_admin' => $user->isAdmin(),
-                    'created_at' => $user->created_at,
-                ],
+            return $this->success('User registered successfully', [
+                'user'         => $this->transformUser($user),
                 'access_token' => $token,
-                'token_type' => 'Bearer',
-            ]
-        ], 201);
+                'token_type'   => 'Bearer'
+            ], 201);
+        });
     }
 
-
-     /**
-     * Login user
-     */
     public function login(Request $request)
     {
-        $validator = Validator::make($request->all(), [
-            'email' => 'required|email',
-            'password' => 'required',
+        $credentials = $request->validate([
+            'email'    => 'required|email',
+            'password' => 'required'
         ]);
 
-        if ($validator->fails()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Validation failed',
-                'errors' => $validator->errors()
-            ], 422);
+        if (!Auth::attempt($credentials)) {
+            return $this->error('Invalid credentials', [], 401);
         }
 
-        if (!Auth::attempt($request->only('email', 'password'))) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Invalid credentials'
-            ], 401);
-        }
-
-        $user = User::where('email', $request->email)->firstOrFail();
+        $user = Auth::user();
         $token = $user->createToken('auth_token')->plainTextToken;
 
-        return response()->json([
-            'success' => true,
-            'message' => 'Login successful',
-            'data' => [
-                'user' => [
-                    'id' => $user->id,
-                    'name' => $user->name,
-                    'email' => $user->email,
-                    'is_admin' => $user->isAdmin(),
-                ],
-                'access_token' => $token,
-                'token_type' => 'Bearer',
-            ]
+        return $this->success('Login successful', [
+            'user'         => $this->transformUser($user),
+            'access_token' => $token,
+            'token_type'   => 'Bearer'
         ]);
     }
 
-
-
-
-    /**
-     * OAuth authetication
-     */
-       public function oauthLogin(Request $request)
+    public function oauthLogin(Request $request)
     {
-        $validator = Validator::make($request->all(), [
-            'provider' => 'required|string|in:google', // Add more providers as needed
+        $data = $request->validate([
+            'provider'    => 'required|string|in:google',
             'provider_id' => 'required|string',
-            'name' => 'required|string|max:255',
-            'email' => 'required|email|max:255',
-            'avatar' => 'nullable|url',
+            'name'        => 'required|string|max:255',
+            'email'       => 'required|email|max:255',
+            'avatar'      => 'nullable|url',
         ]);
 
-        if ($validator->fails()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Validation failed',
-                'errors' => $validator->errors()
-            ], 422);
-        }
+        return DB::transaction(function () use ($data) {
+            $user = User::where([
+                'email'       => $data['email'],
+                'provider'    => $data['provider'],
+                'provider_id' => $data['provider_id']
+            ])->first();
 
-        // Check if user exists by email
-        $user = User::where('email', $request->email)->first();
-
-        if ($user) {
-            // Update user's OAuth info if they don't have it
-            if (!$user->provider_id) {
-                $user->update([
-                    'provider' => $request->provider,
-                    'provider_id' => $request->provider_id,
-                    'avatar' => $request->avatar,
-                ]);
+            if (!$user) {
+                $existingEmail = User::where('email', $data['email'])->first();
+                if ($existingEmail) {
+                    return $this->error('Email already registered with a different provider');
+                }
+                $data['email_verified_at'] = now();
+                $user = User::create($data);
             }
-        } else {
-            // Create new user
-            $user = User::create([
-                'name' => $request->name,
-                'email' => $request->email,
-                'provider' => $request->provider,
-                'provider_id' => $request->provider_id,
-                'avatar' => $request->avatar,
-                'email_verified_at' => now(), // OAuth users are typically verified
-            ]);
-        }
 
-        $token = $user->createToken('auth_token')->plainTextToken;
+            $token = $user->createToken('auth_token')->plainTextToken;
 
-        return response()->json([
-            'success' => true,
-            'message' => 'OAuth login successful',
-            'data' => [
-                'user' => [
-                    'id' => $user->id,
-                    'name' => $user->name,
-                    'email' => $user->email,
-                    'avatar' => $user->avatar,
-                    'provider' => $user->provider,
-                    'is_admin' => $user->isAdmin(),
-                    'created_at' => $user->created_at,
-                ],
+            return $this->success('OAuth login successful', [
+                'user'         => $this->transformUser($user),
                 'access_token' => $token,
-                'token_type' => 'Bearer',
-            ]
-        ]);
+                'token_type'   => 'Bearer'
+            ]);
+        });
     }
 
-
-     /**
-     * Get authenticated user
-     */
     public function me(Request $request)
     {
-        $user = $request->user();
-
-        return response()->json([
-            'success' => true,
-            'data' => [
-                'user' => [
-                    'id' => $user->id,
-                    'name' => $user->name,
-                    'email' => $user->email,
-                    'avatar' => $user->avatar,
-                    'provider' => $user->provider,
-                    'is_admin' => $user->isAdmin(),
-                    'created_at' => $user->created_at,
-                    'email_verified_at' => $user->email_verified_at,
-                ]
-            ]
+        return $this->success('Authenticated user', [
+            'user' => $this->transformUser($request->user())
         ]);
     }
 
-
-    /**
-     * Update user profile
-     */
     public function updateProfile(Request $request)
     {
         $user = $request->user();
 
-        $validator = Validator::make($request->all(), [
-            'name' => 'sometimes|string|max:255',
-            'email' => 'sometimes|email|max:255|unique:users,email,' . $user->id,
+        $data = $request->validate([
+            'name'             => 'sometimes|string|max:255',
+            'email'            => 'sometimes|email|max:255|unique:users,email,' . $user->id,
             'current_password' => 'sometimes|required_with:password',
-            'password' => 'sometimes|string|min:8|confirmed',
-            'avatar' => 'sometimes|nullable|url',
+            'password'         => 'sometimes|string|min:8|confirmed',
+            'avatar'           => 'sometimes|nullable|url',
         ]);
 
-        if ($validator->fails()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Validation failed',
-                'errors' => $validator->errors()
-            ], 422);
-        }
-
-        // If trying to change password, verify current password
-        if ($request->filled('password')) {
-            if (!$user->password || !Hash::check($request->current_password, $user->password)) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Current password is incorrect'
-                ], 422);
+        if (isset($data['password'])) {
+            if (!$user->password || !Hash::check($data['current_password'], $user->password)) {
+                return $this->error('Current password is incorrect');
             }
-            $request->merge(['password' => Hash::make($request->password)]);
+            $data['password'] = Hash::make($data['password']);
         }
 
-        $user->update($request->only(['name', 'email', 'password', 'avatar']));
+        $user->update($data);
 
-        return response()->json([
-            'success' => true,
-            'message' => 'Profile updated successfully',
-            'data' => [
-                'user' => [
-                    'id' => $user->id,
-                    'name' => $user->name,
-                    'email' => $user->email,
-                    'avatar' => $user->avatar,
-                    'provider' => $user->provider,
-                    'is_admin' => $user->isAdmin(),
-                    'created_at' => $user->created_at,
-                ]
-            ]
+        return $this->success('Profile updated successfully', [
+            'user' => $this->transformUser($user)
         ]);
     }
 
-       /**
-     * Logout user (revoke token)
-     */
     public function logout(Request $request)
     {
         $request->user()->currentAccessToken()->delete();
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Logged out successfully'
-        ]);
+        return $this->success('Logged out successfully');
     }
 
-     /**
-     * Logout from all devices (revoke all tokens)
-     */
     public function logoutAll(Request $request)
     {
         $request->user()->tokens()->delete();
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Logged out from all devices successfully'
-        ]);
+        return $this->success('Logged out from all devices successfully');
     }
 
-
-    /**
-     * Delete user account
-     */
     public function deleteAccount(Request $request)
     {
-        $validator = Validator::make($request->all(), [
-            'password' => 'required_without:confirmation',
+        $data = $request->validate([
+            'password'     => 'required_without:confirmation',
             'confirmation' => 'required_without:password|boolean',
         ]);
 
-        if ($validator->fails()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Validation failed',
-                'errors' => $validator->errors()
-            ], 422);
-        }
+        return DB::transaction(function () use ($data, $request) {
+            $user = $request->user();
 
-        $user = $request->user();
-
-        // Verify password if user has one (not OAuth-only)
-        if ($user->password && $request->filled('password')) {
-            if (!Hash::check($request->password, $user->password)) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Password is incorrect'
-                ], 422);
+            if ($user->password && isset($data['password'])) {
+                if (!Hash::check($data['password'], $user->password)) {
+                    return $this->error('Password is incorrect');
+                }
             }
-        }
 
-        // Delete user's tokens
-        $user->tokens()->delete();
+            $user->tokens()->delete();
+            $user->delete();
 
-        // Delete the user account
-        $user->delete();
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Account deleted successfully'
-        ]);
+            return $this->success('Account deleted successfully');
+        });
     }
 
-
-    /**
-     * Refresh token
-     */
     public function refreshToken(Request $request)
     {
         $user = $request->user();
-
-        // Revoke current token
         $request->user()->currentAccessToken()->delete();
-
-        // Create new token
         $token = $user->createToken('auth_token')->plainTextToken;
 
-        return response()->json([
-            'success' => true,
-            'message' => 'Token refreshed successfully',
-            'data' => [
-                'access_token' => $token,
-                'token_type' => 'Bearer',
-            ]
+        return $this->success('Token refreshed successfully', [
+            'access_token' => $token,
+            'token_type'   => 'Bearer'
         ]);
     }
-
-
 }
