@@ -22,7 +22,6 @@ return new class extends Migration
             $table->string('provider_id')->nullable();
             $table->string('avatar')->nullable();
 
-
             $table->string('password')->nullable();
 
             $table->string('role')->default('user');
