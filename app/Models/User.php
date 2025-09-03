@@ -11,8 +11,7 @@ use Laravel\Sanctum\HasApiTokens;
 class User extends Authenticatable
 {
     /** @use HasFactory<\Database\Factories\UserFactory> */
-     use HasApiTokens, HasFactory, Notifiable;
-
+    use HasApiTokens, HasFactory, Notifiable;
 
     /**
      * The attributes that are mass assignable.
@@ -106,12 +105,14 @@ class User extends Authenticatable
 
         if ($existingLike) {
             $existingLike->delete();
+
             return false; // unliked
         } else {
             $this->likes()->create([
                 'likeable_id' => $likeable->id,
-                'likeable_type' => get_class($likeable)
+                'likeable_type' => get_class($likeable),
             ]);
+
             return true; // liked
         }
     }

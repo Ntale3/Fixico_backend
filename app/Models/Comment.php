@@ -2,24 +2,24 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
 
 class Comment extends Model
 {
     //
-     use HasFactory;
+    use HasFactory;
 
     protected $fillable = [
         'content',
         'user_id',
         'blog_id',
         'parent_id',
-        'is_approved'
+        'is_approved',
     ];
 
     protected $casts = [
-        'is_approved' => 'boolean'
+        'is_approved' => 'boolean',
     ];
 
     // Relationships
@@ -77,7 +77,7 @@ class Comment extends Model
     // Helper Methods
     public function isReply()
     {
-        return !is_null($this->parent_id);
+        return ! is_null($this->parent_id);
     }
 
     public function isParentComment()
@@ -105,9 +105,9 @@ class Comment extends Model
         return $this->allReplies()->count();
     }
 
-    public function isLikedBy(User $user = null)
+    public function isLikedBy(?User $user = null)
     {
-        if (!$user) {
+        if (! $user) {
             return false;
         }
 
@@ -116,7 +116,7 @@ class Comment extends Model
 
     public function addReply($content, User $user)
     {
-        if (!$this->canBeRepliedTo()) {
+        if (! $this->canBeRepliedTo()) {
             throw new \Exception('Cannot reply to this comment');
         }
 
@@ -124,7 +124,7 @@ class Comment extends Model
             'content' => $content,
             'user_id' => $user->id,
             'blog_id' => $this->blog_id,
-            'is_approved' => true // or set approval logic
+            'is_approved' => true, // or set approval logic
         ]);
     }
 

@@ -2,16 +2,15 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Str;
-
 
 class Blog extends Model
 {
     //
-       use HasFactory, SoftDeletes;
+    use HasFactory, SoftDeletes;
 
     protected $fillable = [
         'title',
@@ -27,7 +26,7 @@ class Blog extends Model
         'user_id',
         'approved_by',
         'approved_at',
-        'views_count'
+        'views_count',
     ];
 
     protected $casts = [
@@ -87,7 +86,7 @@ class Blog extends Model
     public function setTitleAttribute($value)
     {
         $this->attributes['title'] = $value;
-        $this->attributes['slug'] = Str::slug($value) . '-' . time();
+        $this->attributes['slug'] = Str::slug($value).'-'.time();
     }
 
     public function getExcerptAttribute($value)
@@ -118,7 +117,7 @@ class Blog extends Model
 
     public function needsApproval()
     {
-        return !$this->user->isAdmin() && $this->status === 'pending';
+        return ! $this->user->isAdmin() && $this->status === 'pending';
     }
 
     public function approve(User $admin)
@@ -126,7 +125,7 @@ class Blog extends Model
         $this->update([
             'status' => 'approved',
             'approved_by' => $admin->id,
-            'approved_at' => now()
+            'approved_at' => now(),
         ]);
     }
 
@@ -135,7 +134,7 @@ class Blog extends Model
         $this->update([
             'status' => 'rejected',
             'approved_by' => $admin->id,
-            'admin_notes' => $notes
+            'admin_notes' => $notes,
         ]);
     }
 
@@ -149,9 +148,9 @@ class Blog extends Model
         return $this->allComments()->count();
     }
 
-    public function isLikedBy(User $user = null)
+    public function isLikedBy(?User $user = null)
     {
-        if (!$user) {
+        if (! $user) {
             return false;
         }
 
