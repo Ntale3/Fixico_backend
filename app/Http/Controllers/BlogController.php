@@ -2,14 +2,14 @@
 
 namespace App\Http\Controllers;
 
-use Illuminate\Http\Request;
 use App\Models\Blog;
-use Illuminate\Support\Facades\Storage;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
+
 class BlogController extends Controller
 {
-
-  /**
+    /**
      * Display a listing of published blogs
      */
     public function index(Request $request)
@@ -34,7 +34,7 @@ class BlogController extends Controller
 
             if ($request->filled('tags')) {
                 $tags = is_array($request->tags) ? $request->tags : [$request->tags];
-                $query->where(function($q) use ($tags) {
+                $query->where(function ($q) use ($tags) {
                     foreach ($tags as $tag) {
                         $q->orWhereJsonContains('tags', $tag);
                     }
@@ -95,18 +95,17 @@ class BlogController extends Controller
                     'total' => $blogs->total(),
                     'from' => $blogs->firstItem(),
                     'to' => $blogs->lastItem(),
-                ]
+                ],
             ], 200);
 
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to retrieve blogs',
-                'error' => config('app.debug') ? $e->getMessage() : 'Server error'
+                'error' => config('app.debug') ? $e->getMessage() : 'Server error',
             ], 500);
         }
     }
-
 
     /**
      * Show a specific blog post
@@ -114,11 +113,11 @@ class BlogController extends Controller
     public function show(Request $request, Blog $blog)
     {
         try {
-            abort_if(!$blog->isApproved(), 404, 'Blog post not found or not approved');
+            abort_if(! $blog->isApproved(), 404, 'Blog post not found or not approved');
 
             // Increment views (with IP-based throttling for SPA)
-            $viewKey = 'blog_view_' . $blog->id . '_' . $request->ip();
-            if (!cache()->has($viewKey)) {
+            $viewKey = 'blog_view_'.$blog->id.'_'.$request->ip();
+            if (! cache()->has($viewKey)) {
                 $blog->incrementViews();
                 cache()->put($viewKey, true, now()->addHours(1)); // 1 hour cooldown
             }
@@ -126,22 +125,22 @@ class BlogController extends Controller
             // Load relationships optimized for API
             $blog->load([
                 'user:id,name,email',
-                'comments' => function($query) {
+                'comments' => function ($query) {
                     $query->approved()
                         ->whereNull('parent_id') // Only top-level comments
                         ->with([
                             'user:id,name',
-                            'approvedReplies' => function($replyQuery) {
+                            'approvedReplies' => function ($replyQuery) {
                                 $replyQuery->with(['user:id,name'])
                                     ->withCount('likes')
                                     ->latest()
                                     ->limit(5); // Limit replies for performance
-                            }
+                            },
                         ])
                         ->withCount(['likes', 'allReplies'])
                         ->latest()
                         ->limit(20); // Limit comments for initial load
-                }
+                },
             ])->loadCount(['likes', 'allComments']);
 
             // Check if current user liked this blog
@@ -158,7 +157,7 @@ class BlogController extends Controller
                 'content' => $blog->content,
                 'excerpt' => $blog->excerpt,
                 'featured_image' => $blog->featured_image ? Storage::url($blog->featured_image) : null,
-                'images' => $blog->images ? array_map(fn($img) => Storage::url($img), $blog->images) : [],
+                'images' => $blog->images ? array_map(fn ($img) => Storage::url($img), $blog->images) : [],
                 'location' => $blog->location,
                 'latitude' => $blog->latitude,
                 'longitude' => $blog->longitude,
@@ -207,18 +206,17 @@ class BlogController extends Controller
             return response()->json([
                 'success' => true,
                 'message' => 'Blog retrieved successfully',
-                'data' => $blogData
+                'data' => $blogData,
             ], 200);
 
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to retrieve blog',
-                'error' => config('APP_DEBUG') ? $e->getMessage() : 'Blog not found'
+                'error' => config('APP_DEBUG') ? $e->getMessage() : 'Blog not found',
             ], $e->getCode() ?: 500);
         }
     }
-
 
     /**
      * Store a new blog post
@@ -287,7 +285,7 @@ class BlogController extends Controller
                 'content' => $blog->content,
                 'excerpt' => $blog->excerpt,
                 'featured_image' => $blog->featured_image ? Storage::url($blog->featured_image) : null,
-                'images' => $blog->images ? array_map(fn($img) => Storage::url($img), $blog->images) : [],
+                'images' => $blog->images ? array_map(fn ($img) => Storage::url($img), $blog->images) : [],
                 'location' => $blog->location,
                 'tags' => $blog->tags ?? [],
                 'status' => $blog->status,
@@ -306,14 +304,14 @@ class BlogController extends Controller
             return response()->json([
                 'success' => true,
                 'message' => $message,
-                'data' => $blogData
+                'data' => $blogData,
             ], 201);
 
         } catch (\Illuminate\Validation\ValidationException $e) {
             return response()->json([
                 'success' => false,
                 'message' => 'Validation failed',
-                'errors' => $e->errors()
+                'errors' => $e->errors(),
             ], 422);
 
         } catch (\Exception $e) {
@@ -330,7 +328,7 @@ class BlogController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to create blog post',
-                'error' => config('app.debug') ? $e->getMessage() : 'Server error'
+                'error' => config('app.debug') ? $e->getMessage() : 'Server error',
             ], 500);
         }
     }
@@ -338,14 +336,13 @@ class BlogController extends Controller
     /**
      * Update an existing blog post
      */
-
-     public function update(Request $request, Blog $blog)
+    public function update(Request $request, Blog $blog)
     {
         try {
-            abort_if(!$blog->canBeEditedBy(auth('sanctum')->user()), 403, 'Unauthorized action');
+            abort_if(! $blog->canBeEditedBy(auth('sanctum')->user()), 403, 'Unauthorized action');
 
             $validated = $request->validate([
-                'title' => 'required|string|max:255|unique:blogs,title,' . $blog->id,
+                'title' => 'required|string|max:255|unique:blogs,title,'.$blog->id,
                 'content' => 'required|string|min:100',
                 'location' => 'required|string|max:255',
                 'excerpt' => 'nullable|string|max:500',
@@ -369,7 +366,7 @@ class BlogController extends Controller
             }
 
             // If not admin, reset to pending status
-            if (!auth('sanctum')->user()->isAdmin() && $blog->isApproved()) {
+            if (! auth('sanctum')->user()->isAdmin() && $blog->isApproved()) {
                 $validated['status'] = 'pending';
                 $validated['approved_by'] = null;
                 $validated['approved_at'] = null;
@@ -388,7 +385,7 @@ class BlogController extends Controller
                 'content' => $blog->content,
                 'excerpt' => $blog->excerpt,
                 'featured_image' => $blog->featured_image ? Storage::url($blog->featured_image) : null,
-                'images' => $blog->images ? array_map(fn($img) => Storage::url($img), $blog->images) : [],
+                'images' => $blog->images ? array_map(fn ($img) => Storage::url($img), $blog->images) : [],
                 'location' => $blog->location,
                 'tags' => $blog->tags ?? [],
                 'status' => $blog->status,
@@ -403,14 +400,14 @@ class BlogController extends Controller
             return response()->json([
                 'success' => true,
                 'message' => 'Blog post updated successfully',
-                'data' => $blogData
+                'data' => $blogData,
             ], 200);
 
         } catch (\Illuminate\Validation\ValidationException $e) {
             return response()->json([
                 'success' => false,
                 'message' => 'Validation failed',
-                'errors' => $e->errors()
+                'errors' => $e->errors(),
             ], 422);
 
         } catch (\Exception $e) {
@@ -419,11 +416,10 @@ class BlogController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to update blog post',
-                'error' => config('APP_DEBUG') ? $e->getMessage() : 'Server error'
+                'error' => config('APP_DEBUG') ? $e->getMessage() : 'Server error',
             ], 500);
         }
     }
-
 
     /**
      * Toggle like status for a blog post
@@ -431,16 +427,15 @@ class BlogController extends Controller
      * This method allows users to like or unlike a blog post.
      * It returns the updated like status and total likes count.
      *
-     * @param Blog $blog
      * @return \Illuminate\Http\JsonResponse
+     *
      * @throws \Illuminate\Auth\Access\AuthorizationException
      * @throws \Symfony\Component\HttpKernel\Exception\NotFoundHttpException
      */
-
     public function toggleLike(Blog $blog)
     {
         try {
-            abort_if(!$blog->isApproved(), 404, 'Blog post not found');
+            abort_if(! $blog->isApproved(), 404, 'Blog post not found');
 
             $user = auth('sanctum')->user();
 
@@ -463,20 +458,19 @@ class BlogController extends Controller
                 'message' => $liked ? 'Blog liked successfully' : 'Blog unliked successfully',
                 'data' => [
                     'liked' => $liked,
-                    'total_likes' => $totalLikes
-                ]
+                    'total_likes' => $totalLikes,
+                ],
             ], 200);
 
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to toggle like',
-                'error' => config('APP_DEBUG') ? $e->getMessage() : 'Server error'
+                'error' => config('APP_DEBUG') ? $e->getMessage() : 'Server error',
             ], 500);
         }
 
     }
-
 
     /**
      * Get current user's blogs
@@ -520,122 +514,112 @@ class BlogController extends Controller
                     'last_page' => $blogs->lastPage(),
                     'per_page' => $blogs->perPage(),
                     'total' => $blogs->total(),
-                ]
+                ],
             ], 200);
 
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to retrieve blogs',
-                'error' => config('app.debug') ? $e->getMessage() : 'Server error'
+                'error' => config('app.debug') ? $e->getMessage() : 'Server error',
             ], 500);
         }
     }
 
-
     /**
- * Store a new comment for a specific blog post
- *
- * @param Request $request
- * @param Blog $blog
- * @return \Illuminate\Http\JsonResponse
- */
-public function storeComment(Request $request, Blog $blog)
-{
-    try {
-        // Ensure the blog is approved
-        abort_if(!$blog->isApproved(), 404, 'Blog post not found or not approved');
+     * Store a new comment for a specific blog post
+     *
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function storeComment(Request $request, Blog $blog)
+    {
+        try {
+            // Ensure the blog is approved
+            abort_if(! $blog->isApproved(), 404, 'Blog post not found or not approved');
 
-        // Validate the request
-        $validated = $request->validate([
-            'content' => 'required|string|min:2|max:1000',
-        ]);
+            // Validate the request
+            $validated = $request->validate([
+                'content' => 'required|string|min:2|max:1000',
+            ]);
 
-        // Begin transaction
-        DB::beginTransaction();
+            // Begin transaction
+            DB::beginTransaction();
 
-        // Create the comment
-        $comment = $blog->comments()->create([
-            'user_id' => auth('sanctum')->id(),
-            'content' => $validated['content']
-        ]);
+            // Create the comment
+            $comment = $blog->comments()->create([
+                'user_id' => auth('sanctum')->id(),
+                'content' => $validated['content'],
+            ]);
 
-        // Load relationships for response
-        $comment->load('user:id,name');
+            // Load relationships for response
+            $comment->load('user:id,name');
 
-        // Commit transaction
-        DB::commit();
+            // Commit transaction
+            DB::commit();
 
-        // Transform response
-        $commentData = [
-            'id' => $comment->id,
-            'content' => $comment->content,
-            'likes_count' => 0, // New comment starts with 0 likes
-            'replies_count' => 0, // New comment starts with 0 replies
-            'created_at' => $comment->created_at->toISOString(),
-            'author' => [
-                'id' => $comment->user->id,
-                'name' => $comment->user->name,
-            ],
-            'replies' => [], // No replies for a new comment
-        ];
+            // Transform response
+            $commentData = [
+                'id' => $comment->id,
+                'content' => $comment->content,
+                'likes_count' => 0, // New comment starts with 0 likes
+                'replies_count' => 0, // New comment starts with 0 replies
+                'created_at' => $comment->created_at->toISOString(),
+                'author' => [
+                    'id' => $comment->user->id,
+                    'name' => $comment->user->name,
+                ],
+                'replies' => [], // No replies for a new comment
+            ];
 
-        $message = auth('sanctum')->user()->isAdmin()
-            ? 'Comment added successfully!'
-            : 'Comment submitted for approval!';
+            $message = auth('sanctum')->user()->isAdmin()
+                ? 'Comment added successfully!'
+                : 'Comment submitted for approval!';
 
-        return response()->json([
-            'success' => true,
-            'message' => $message,
-            'data' => $commentData,
-        ], 201);
+            return response()->json([
+                'success' => true,
+                'message' => $message,
+                'data' => $commentData,
+            ], 201);
 
-    } catch (\Illuminate\Validation\ValidationException $e) {
-        return response()->json([
-            'success' => false,
-            'message' => 'Validation failed',
-            'errors' => $e->errors(),
-        ], 422);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $e->errors(),
+            ], 422);
 
-    } catch (\Exception $e) {
-        DB::rollBack();
+        } catch (\Exception $e) {
+            DB::rollBack();
 
-        return response()->json([
-            'success' => false,
-            'message' => 'Failed to add comment',
-            'error' => config('app.debug') ? $e->getMessage() : 'Server error',
-        ], 500);
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to add comment',
+                'error' => config('app.debug') ? $e->getMessage() : 'Server error',
+            ], 500);
+        }
     }
-}
-
-
 
     /**
      * Delete blog post (soft delete)
-     *
      */
-
     public function destroy(Blog $blog)
     {
         try {
-            abort_if(!$blog->canBeEditedBy(auth('sanctum')->user()), 403, 'Unauthorized action');
+            abort_if(! $blog->canBeEditedBy(auth('sanctum')->user()), 403, 'Unauthorized action');
 
             $blog->delete();
 
             return response()->json([
                 'success' => true,
-                'message' => 'Blog post deleted successfully'
+                'message' => 'Blog post deleted successfully',
             ], 200);
 
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to delete blog post',
-                'error' => config('app.debug') ? $e->getMessage() : 'Server error'
+                'error' => config('app.debug') ? $e->getMessage() : 'Server error',
             ], 500);
         }
     }
-
-
-
 }
